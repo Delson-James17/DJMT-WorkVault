@@ -318,9 +318,18 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
      Render
   -------------------------- */
   return (
-    <div style={{ padding: 16 }}>
-      <Card style={{ background: "#111", border: "none", color: "#fff" }}>
-        <Card.Body style={{ ...matteBg }}>
+    <div style={{ 
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "#0f0f10",
+      overflow: "auto",
+      padding: 0
+    }}>
+      <Card style={{ background: "transparent", border: "none", color: "#fff", minHeight: "100vh" }}>
+        <Card.Body style={{ ...matteBg, minHeight: "100vh" }}>
           <Row className="align-items-center mb-3">
             <Col md={6}>
               <Form.Control
