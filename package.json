@@ -18,7 +18,7 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^5.4.394",
+    "pdfjs-dist": "^4.4.168",
     "react": "^19.2.0",
     "react-bootstrap": "^2.10.10",
     "react-data-grid": "^7.0.0-beta.58",
