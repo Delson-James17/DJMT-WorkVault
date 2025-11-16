@@ -1,11 +1,12 @@
 // src/components/Editor/PdfEditor.tsx
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import { Button, Form, Alert } from "react-bootstrap";
-import * as pdfjsLib from "pdfjs-dist";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
-// Configure PDF.js worker - Use local worker file
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Set worker from CDN
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 type TextAnnotation = {
   id: string;
@@ -31,192 +32,78 @@ interface PdfEditorProps {
 }
 
 export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.5);
   const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
   const [imageAnnotations, setImageAnnotations] = useState<ImageAnnotation[]>([]);
   const [newText, setNewText] = useState("");
-  const [scale, setScale] = useState(1.5);
-  
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Render annotations overlay
-  const renderAnnotations = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  function onDocumentLoadSuccess({ numPages }: { numPages: number }): void {
+    setNumPages(numPages);
+    setLoading(false);
+    setError(null);
+  }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  function onDocumentLoadError(error: Error): void {
+    console.error('Error loading PDF:', error);
+    setError(`Failed to load PDF: ${error.message}`);
+    setLoading(false);
+  }
 
-    // Draw text annotations for current page
-    textAnnotations
-      .filter(a => a.page === currentPage)
-      .forEach(annotation => {
-        ctx.font = "16px Arial";
-        ctx.fillStyle = "red";
-        ctx.fillText(annotation.text, annotation.x, annotation.y);
-      });
-
-    // Draw image annotations for current page
-    imageAnnotations
-      .filter(a => a.page === currentPage)
-      .forEach(annotation => {
-        const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, annotation.x, annotation.y, annotation.width, annotation.height);
-        };
-        img.src = annotation.url;
-      });
-  }, [currentPage, textAnnotations, imageAnnotations]);
-
-  // Render specific page
-  const renderPage = useCallback(async (pdf: PDFDocumentProxy, pageNum: number) => {
-    try {
-      const page = await pdf.getPage(pageNum);
-      const viewport = page.getViewport({ scale });
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const context = canvas.getContext("2d");
-      if (!context) return;
-
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-        canvas: canvas,
-      };
-
-      await page.render(renderContext).promise;
-      
-      // Render annotations on top
-      renderAnnotations();
-    } catch (err) {
-      console.error("Page rendering error:", err);
-      setError(`Failed to render page: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-  }, [scale, renderAnnotations]);
-
-  // Load and render PDF
-  useEffect(() => {
-    const loadPdf = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Load the PDF document
-        const loadingTask = pdfjsLib.getDocument({
-          url: url,
-          withCredentials: false,
-          isEvalSupported: false,
-        });
-
-        const pdf = await loadingTask.promise;
-        pdfDocRef.current = pdf;
-        setNumPages(pdf.numPages);
-        setLoading(false);
-
-        // Render first page
-        await renderPage(pdf, 1);
-      } catch (err) {
-        console.error("PDF loading error:", err);
-        setError(`Failed to load PDF: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        setLoading(false);
-      }
-    };
-
-    if (url) {
-      loadPdf();
-    }
-  }, [url, renderPage]);
-
-  // Re-render when page changes
-  useEffect(() => {
-    if (pdfDocRef.current) {
-      renderPage(pdfDocRef.current, currentPage);
-    }
-  }, [currentPage, scale, renderPage]);
-
-  // Add text annotation at center of canvas
   const addTextAnnotation = () => {
     if (!newText.trim()) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
 
     const annotation: TextAnnotation = {
       id: Date.now().toString(),
       text: newText,
-      x: canvas.width / 2,
-      y: canvas.height / 2,
-      page: currentPage,
+      x: 100,
+      y: 100,
+      page: pageNumber,
     };
 
     setTextAnnotations(prev => [...prev, annotation]);
     setNewText("");
-    
-    // Re-render to show new annotation
-    setTimeout(() => renderAnnotations(), 100);
   };
 
-  // Add image annotation
   const addImageAnnotation = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
       const annotation: ImageAnnotation = {
         id: Date.now().toString(),
         url: event.target?.result as string,
-        x: canvas.width / 2 - 50,
-        y: canvas.height / 2 - 50,
+        x: 100,
+        y: 100,
         width: 100,
         height: 100,
-        page: currentPage,
+        page: pageNumber,
       };
 
       setImageAnnotations(prev => [...prev, annotation]);
-      
-      // Re-render to show new annotation
-      setTimeout(() => renderAnnotations(), 100);
     };
     reader.readAsDataURL(file);
   };
 
-  // Page navigation
-  const goToPage = (pageNum: number) => {
-    if (pageNum >= 1 && pageNum <= numPages) {
-      setCurrentPage(pageNum);
-    }
+  const removeTextAnnotation = (id: string) => {
+    setTextAnnotations(prev => prev.filter(a => a.id !== id));
   };
 
-  // Save annotations
   const handleSave = () => {
     onSave({ texts: textAnnotations, images: imageAnnotations });
     alert("Annotations saved!");
   };
-
-  if (loading) {
-    return <Alert variant="info">Loading PDF...</Alert>;
-  }
 
   if (error) {
     return (
       <Alert variant="danger">
         <strong>Error:</strong> {error}
         <br />
-        <small>Make sure the PDF URL is accessible and CORS is enabled on your storage bucket.</small>
+        <small>Make sure the PDF URL is accessible.</small>
       </Alert>
     );
   }
@@ -224,13 +111,21 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
   return (
     <div>
       <div className="d-flex gap-2 mb-3 align-items-center flex-wrap">
-        <Button size="sm" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1}>
+        <Button 
+          size="sm" 
+          onClick={() => setPageNumber(p => Math.max(1, p - 1))} 
+          disabled={pageNumber <= 1}
+        >
           Previous
         </Button>
         <span>
-          Page {currentPage} of {numPages}
+          Page {pageNumber} of {numPages || '?'}
         </span>
-        <Button size="sm" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= numPages}>
+        <Button 
+          size="sm" 
+          onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} 
+          disabled={pageNumber >= numPages}
+        >
           Next
         </Button>
         
@@ -274,23 +169,83 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
       </div>
 
       <div 
-        ref={containerRef}
         style={{ 
           border: "1px solid #ddd", 
           overflow: "auto",
           maxHeight: "70vh",
           backgroundColor: "#f5f5f5",
-          padding: 10
+          padding: 10,
+          position: "relative"
         }}
       >
-        <canvas 
-          ref={canvasRef}
-          style={{ 
-            display: "block",
-            margin: "0 auto",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-          }}
-        />
+        {loading && (
+          <div className="text-center p-4">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        )}
+        
+        <Document
+          file={url}
+          onLoadSuccess={onDocumentLoadSuccess}
+          onLoadError={onDocumentLoadError}
+          loading={
+            <div className="text-center p-4">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading PDF...</span>
+              </div>
+            </div>
+          }
+        >
+          <Page 
+            pageNumber={pageNumber} 
+            scale={scale}
+            renderTextLayer={true}
+            renderAnnotationLayer={true}
+          />
+        </Document>
+        
+        {/* Render text annotations as overlays */}
+        {textAnnotations
+          .filter(a => a.page === pageNumber)
+          .map(annotation => (
+            <div
+              key={annotation.id}
+              style={{
+                position: 'absolute',
+                left: annotation.x,
+                top: annotation.y,
+                color: 'red',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                pointerEvents: 'none',
+                zIndex: 1000
+              }}
+            >
+              {annotation.text}
+            </div>
+          ))}
+          
+        {/* Render image annotations as overlays */}
+        {imageAnnotations
+          .filter(a => a.page === pageNumber)
+          .map(annotation => (
+            <img
+              key={annotation.id}
+              src={annotation.url}
+              alt="annotation"
+              style={{
+                position: 'absolute',
+                left: annotation.x,
+                top: annotation.y,
+                width: annotation.width,
+                height: annotation.height,
+                pointerEvents: 'none',
+                zIndex: 1000
+              }}
+            />
+          ))}
       </div>
 
       {textAnnotations.length > 0 && (
@@ -304,10 +259,7 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
                   size="sm" 
                   variant="link" 
                   className="text-danger"
-                  onClick={() => {
-                    setTextAnnotations(prev => prev.filter(t => t.id !== a.id));
-                    setTimeout(() => renderAnnotations(), 100);
-                  }}
+                  onClick={() => removeTextAnnotation(a.id)}
                 >
                   Remove
                 </Button>
