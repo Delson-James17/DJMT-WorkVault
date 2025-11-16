@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../api/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
-import { Button, ListGroup } from 'react-bootstrap';
+import { Button, ListGroup, Card } from 'react-bootstrap';
 
-// Strong type for records in file_bank table
 interface FileRecord {
   id: string;
   user_id: string;
@@ -17,10 +16,8 @@ interface FileRecord {
 export const FileBank: React.FC = () => {
   const { user } = useAuth();
   const [files, setFiles] = useState<FileRecord[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // -----------------------------
-  // FIX: useCallback so hooks work properly
-  // -----------------------------
   const loadFiles = useCallback(async () => {
     if (!user) return;
 
@@ -41,37 +38,42 @@ export const FileBank: React.FC = () => {
 useEffect(() => {
   if (!user) return;
 
-  const fetchFiles = async () => {
+  const run = async () => {
     await loadFiles();
   };
 
-  fetchFiles();
+  run();
 }, [user, loadFiles]);
 
-  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
 
-    const path = `file-bank/${user.id}/${Date.now()}-${file.name}`;
+  const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedFile(file);
+  };
+
+  const onSaveAttachment = async () => {
+    if (!selectedFile || !user) return;
+
+    const path = `file-bank/${user.id}/${Date.now()}-${selectedFile.name}`;
 
     const { error: uploadErr } = await supabase.storage
       .from('file-bank')
-      .upload(path, file);
+      .upload(path, selectedFile);
 
     if (uploadErr) {
       console.error(uploadErr);
       return;
     }
 
-    // Insert metadata in file_bank table
     await supabase.from('file_bank').insert({
       user_id: user.id,
-      filename: file.name,
+      filename: selectedFile.name,
       storage_path: path,
-      content_type: file.type,
-      size: file.size,
+      content_type: selectedFile.type,
+      size: selectedFile.size,
     });
 
+    setSelectedFile(null);
     loadFiles();
   };
 
@@ -94,23 +96,76 @@ useEffect(() => {
   };
 
   return (
-    <div>
-      <input type="file" onChange={onUpload} />
+    <div
+      style={{
+        background: '#1b1b1b',
+        padding: '20px',
+        borderRadius: '12px',
+        color: 'white',
+      }}
+    >
+      <h3 style={{ color: '#FFD700' }}>📁 File Bank</h3>
 
-      <ListGroup className="mt-3">
-        {files.map((f) => (
-          <ListGroup.Item
-            key={f.id}
-            className="d-flex justify-content-between align-items-center"
-          >
-            <div>{f.filename}</div>
+      <input
+        type="file"
+        onChange={onSelectFile}
+        style={{ marginTop: '10px', marginBottom: '10px' }}
+      />
 
-            <Button size="sm" onClick={() => downloadFile(f.storage_path, f.filename)}>
-              Download
-            </Button>
-          </ListGroup.Item>
-        ))}
-      </ListGroup>
+      {selectedFile && (
+        <Button
+          onClick={onSaveAttachment}
+          style={{
+            background: '#FFD700',
+            border: 'none',
+            color: '#000',
+            fontWeight: 'bold',
+            marginBottom: '20px',
+          }}
+        >
+          Save Attachment
+        </Button>
+      )}
+
+      <Card
+        style={{
+          background: '#222',
+          border: '1px solid #333',
+          color: 'white',
+          marginTop: '20px',
+        }}
+      >
+        <Card.Body>
+          <ListGroup variant="flush">
+            {files.map((f) => (
+              <ListGroup.Item
+                key={f.id}
+                style={{
+                  background: '#1f1f1f',
+                  color: '#e0e0e0',
+                  border: '1px solid #333',
+                }}
+                className="d-flex justify-content-between align-items-center"
+              >
+                <div>{f.filename}</div>
+
+                <Button
+                  size="sm"
+                  onClick={() => downloadFile(f.storage_path, f.filename)}
+                  style={{
+                    background: '#FFD700',
+                    border: 'none',
+                    color: '#000',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Download
+                </Button>
+              </ListGroup.Item>
+            ))}
+          </ListGroup>
+        </Card.Body>
+      </Card>
     </div>
   );
 };

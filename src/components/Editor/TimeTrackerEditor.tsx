@@ -106,39 +106,43 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
     });
   };
 
-const uploadFile = async (file: File, bucket: string) => {
-  if (!user) throw new Error("Sign in first");
+  // Upload helper - fixed to remove unused variable
+  const uploadFile = async (file: File, folder: string) => {
+    if (!user) throw new Error("Sign in first");
 
-  const storagePath = `${user.id}/${uuidv4()}-${file.name}`;
+    const storagePath = `${user.id}/${uuidv4()}-${file.name}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from(folder)
+      .upload(storagePath, file, {
+        upsert: true,
+        contentType: file.type,
+      });
 
-  const { error: uploadError } = await supabase.storage
-    .from(bucket)
-    .upload(storagePath, file, { upsert: true, contentType: file.type });
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      throw new Error(`Upload failed: ${uploadError.message}`);
+    }
 
-  if (uploadError) {
-    console.error("Upload error:", uploadError);
-    throw new Error(`Upload failed: ${uploadError.message}`);
-  }
+    const { data } = supabase.storage.from(folder).getPublicUrl(storagePath);
+    if (!data?.publicUrl) throw new Error("Failed to get public URL");
 
-  const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
-  if (!data?.publicUrl) throw new Error("Failed to get public URL");
+    // Insert metadata into file_bank
+    const { error: insertError } = await supabase.from("file_bank").insert({
+      user_id: user.id,
+      filename: file.name,
+      storage_path: storagePath,
+      content_type: file.type,
+      size: file.size,
+    });
+    
+    if (insertError) {
+      console.error("Database insert error:", insertError);
+      throw new Error(`Database insert failed: ${insertError.message}`);
+    }
 
-  // Save metadata in DB
-  const { error: insertError } = await supabase.from("file_bank").insert({
-    user_id: user.id,
-    filename: file.name,
-    storage_path: storagePath,
-    content_type: file.type,
-    size: file.size,
-  });
-
-  if (insertError) {
-    console.error("Database insert error:", insertError);
-    throw new Error(`Database insert failed: ${insertError.message}`);
-  }
-
-  return { storagePath, url: data.publicUrl };
-};
+    return { storagePath, url: data.publicUrl };
+  };
 
   // File upload handler
   const onDropFile = async (acceptedFiles: File[]) => {
