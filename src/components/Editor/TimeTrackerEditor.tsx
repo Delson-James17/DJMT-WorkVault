@@ -52,7 +52,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   // PDF editor state
   const [annotations, setAnnotations] = useState<PdfAnnotation[]>([]);
   const pdfContainerRef = useRef<HTMLDivElement | null>(null);
-  const [pdfNumPages] = useState<number>(1);
+  const [pdfNumPages, setPdfNumPages] = useState<number>(1);
   const [showAnnotModal, setShowAnnotModal] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<PdfAnnotation | null>(null);
 
@@ -417,32 +417,6 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
               </Dropzone>
             </Col>
           </Row>
-
-          <div style={{ ...panelStyle, marginBottom: 12 }}>
-            <Table bordered className="table-sm" style={{ background: "#0b0b0b", color: "#eee" }}>
-              <tbody>
-                {template.rows.map((row, r) => (
-                  <tr key={r}>
-                    {row.map((cell, c) => (
-                      <td key={cell.id} style={{ background: "#0b0b0b" }}>
-                        <Form.Control value={cell.text} onChange={e => updateCell(r, c, e.target.value)} size="sm" style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #222" }} />
-                      </td>
-                    ))}
-                    <td style={{ background: "#0b0b0b" }}>
-                      <Button size="sm" variant="danger" onClick={() => removeRow(r)}>Del row</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-
-              <div>
-                <Button onClick={addRow} size="sm" style={{ ...yellowBtn, marginRight: 8 }}>Add Row</Button>
-                <Button onClick={addCol} size="sm" style={{ ...yellowBtn, marginRight: 8 }}>Add Col</Button>
-                <Button onClick={() => removeCol(template.rows[0].length - 1)} size="sm" style={yellowBtn}>Del Col</Button>
-              </div>
-                            
-          </div>
 
           {template.attachment?.type === "pdf" && (
             <>
