@@ -5,7 +5,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button, Form, Row, Col, Card, Spinner, Modal } from "react-bootstrap";
 import Dropzone from "react-dropzone";
 import { v4 as uuidv4 } from "uuid";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 /* --------------------------
    Types & helpers
@@ -17,7 +16,7 @@ type TemplateData = {
   rows: Cell[][];
   attachment?: { url: string; type: "pdf" | "word" | "excel"; storagePath: string };
   meta?: { project?: string; period?: string; employeeName?: string };
-  annotations?: PdfAnnotation[]; // Store annotations in template
+  annotations?: PdfAnnotation[];
 };
 
 const makeEmptyCell = (): Cell => ({ id: uuidv4(), text: "" });
@@ -29,13 +28,13 @@ const defaultTemplate: TemplateData = {
 };
 
 /* --------------------------
-   PDF Annotation types
+   PDF Annotation types - using absolute pixel coordinates
 -------------------------- */
 type PdfAnnotation = {
   id: string;
   pageIndex: number;
-  xPct: number;
-  yPct: number;
+  x: number;  // Absolute pixels from left
+  y: number;  // Absolute pixels from top
   text: string;
   fontSize: number;
   fontFamily: string;
@@ -54,10 +53,9 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   // PDF editor state
   const [annotations, setAnnotations] = useState<PdfAnnotation[]>([]);
   const pdfContainerRef = useRef<HTMLDivElement | null>(null);
-  const [pdfNumPages] = useState<number>(1);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [showAnnotModal, setShowAnnotModal] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<PdfAnnotation | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
 
   /* --------------------------
      Load template (if editing)
@@ -192,42 +190,8 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   };
 
   /* --------------------------
-     PDF Editor logic
+     PDF Editor logic - kept for modal editing functionality
   -------------------------- */
-  const onPdfClick = (e: React.MouseEvent) => {
-    if (!pdfContainerRef.current || !template.attachment || !isEditMode) return;
-
-    const container = pdfContainerRef.current;
-    const rect = container.getBoundingClientRect();
-    const offsetY = e.clientY - rect.top;
-    const offsetX = e.clientX - rect.left;
-
-    const pageCount = Math.max(1, pdfNumPages);
-    const pageHeightPx = rect.height / pageCount;
-    let pageIndex = Math.floor(offsetY / pageHeightPx);
-    if (pageIndex < 0) pageIndex = 0;
-    if (pageIndex >= pageCount) pageIndex = pageCount - 1;
-
-    const pageTop = pageIndex * pageHeightPx;
-    const xPct = offsetX / rect.width;
-    const yPct = (offsetY - pageTop) / pageHeightPx;
-
-    const newAnnot: PdfAnnotation = {
-      id: uuidv4(),
-      pageIndex,
-      xPct: Math.max(0, Math.min(1, xPct)),
-      yPct: Math.max(0, Math.min(1, yPct)),
-      text: "Edit me",
-      fontSize: 12,
-      fontFamily: "Arial",
-      fontColor: "#000000",
-    };
-
-    setAnnotations(prev => [...prev, newAnnot]);
-    setEditingAnnotation(newAnnot);
-    setShowAnnotModal(true);
-  };
-
   const saveAnnotationEdit = (updated: PdfAnnotation) => {
     setAnnotations(prev => prev.map(a => (a.id === updated.id ? updated : a)));
     setEditingAnnotation(null);
@@ -238,78 +202,6 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
     setAnnotations(prev => prev.filter(a => a.id !== id));
     setEditingAnnotation(null);
     setShowAnnotModal(false);
-  };
-
-  const exportPdfWithAnnotations = async (alsoUpload = false) => {
-    if (!template.attachment?.url) return alert("No PDF loaded");
-    setLoading(true);
-    try {
-      const res = await fetch(template.attachment.url);
-      if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.statusText}`);
-      const arrayBuffer = await res.arrayBuffer();
-      const srcPdf = await PDFDocument.load(arrayBuffer);
-      const pdfCopy = await PDFDocument.create();
-
-      const copiedPages = await pdfCopy.copyPages(srcPdf, srcPdf.getPageIndices());
-      copiedPages.forEach(p => pdfCopy.addPage(p));
-
-      const helv = await pdfCopy.embedFont(StandardFonts.Helvetica);
-
-      annotations.forEach(a => {
-        const page = pdfCopy.getPage(a.pageIndex);
-        const { width, height } = page.getSize();
-        const x = a.xPct * width;
-        const y = (1 - a.yPct) * height;
-        const padding = 2;
-        const textWidth = helv.widthOfTextAtSize(a.text, a.fontSize);
-        const textHeight = a.fontSize;
-
-        try {
-          page.drawRectangle({
-            x: x - padding,
-            y: y - padding,
-            width: textWidth + 2 * padding,
-            height: textHeight + 2 * padding,
-            color: rgb(1, 1, 1),
-          });
-        } catch (err) {
-          console.error("Error drawing rectangle:", err);
-        }
-
-        page.drawText(a.text, { x, y, size: a.fontSize, font: helv, color: rgb(0, 0, 0) });
-      });
-
-      const mergedBytes = await pdfCopy.save();
-      const blob = new Blob([new Uint8Array(mergedBytes)], { type: "application/pdf" });
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${name.replace(/\s+/g, "_") || "time-tracker"}-edited.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-
-      if (alsoUpload && user) {
-        const newFile = new File([blob], `${uuidv4()}-${name.replace(/\s+/g, "_")}-edited.pdf`, { type: "application/pdf" });
-        const folder = "file-bank";
-        const storagePath = `${user.id}/${newFile.name}`;
-        const { error: uploadError } = await supabase.storage.from(folder).upload(storagePath, newFile, { upsert: true, contentType: "application/pdf" });
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-          alert("Edited PDF downloaded but failed to upload edited file.");
-        } else {
-          await supabase.from("file_bank").insert({ user_id: user.id, filename: newFile.name, storage_path: storagePath, content_type: "application/pdf", size: newFile.size });
-          alert("Edited PDF uploaded to File Bank");
-        }
-      }
-    } catch (err) {
-      console.error(err);
-      alert(`Failed to export PDF: ${err instanceof Error ? err.message : "Unknown error"}`);
-    } finally {
-      setLoading(false);
-    }
   };
 
   /* --------------------------
@@ -345,19 +237,6 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
               />
             </Col>
             <Col md={6} className="text-end">
-              {template.attachment?.type === "pdf" && (
-                <Button 
-                  style={{ 
-                    ...yellowBtn, 
-                    marginRight: 8,
-                    background: isEditMode ? "#4CAF50" : "#FFD700",
-                  }} 
-                  onClick={() => setIsEditMode(!isEditMode)}
-                >
-                  <span style={{ marginRight: 6 }}>✏️</span>
-                  {isEditMode ? "Done Editing" : "Edit PDF"}
-                </Button>
-              )}
               <Button style={yellowBtn} onClick={saveTemplate} disabled={loading}>
                 {loading ? <Spinner animation="border" size="sm" /> : "Save Template"}
               </Button>
@@ -401,85 +280,51 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
 
           {template.attachment?.type === "pdf" && (
             <>
-              {isEditMode && (
-                <div style={{ marginBottom: 8, color: "#4CAF50", fontWeight: 600, fontSize: 14 }}>
-                  ✏️ Edit Mode Active - Click anywhere on the PDF to add text annotations
-                </div>
-              )}
+              <div style={{ marginBottom: 8, color: "#4CAF50", fontWeight: 600, fontSize: 14 }}>
+                📄 Use the PDF toolbar above to draw, highlight, or add text annotations
+              </div>
               <div 
                 ref={pdfContainerRef} 
                 style={{ 
-                  border: isEditMode ? "2px solid #4CAF50" : "1px solid #333", 
-                  minHeight: 300, 
-                  cursor: isEditMode ? "crosshair" : "default", 
+                  border: "1px solid #333", 
+                  minHeight: 300,
+                  height: 600,
+                  overflow: "hidden",
                   position: "relative",
                   background: "#1a1a1a"
                 }} 
-                onClick={onPdfClick}
               >
                 <iframe 
+                  ref={iframeRef}
                   src={template.attachment.url} 
                   width="100%" 
-                  height={400} 
-                  title="PDF Preview" 
-                  style={{ pointerEvents: "none", border: "none" }}
+                  height="100%" 
+                  title="PDF Viewer" 
+                  style={{ border: "none", display: "block" }}
                 />
-                
-                {/* Render annotations as overlays */}
-                {annotations.map(annot => {
-                  const pageCount = Math.max(1, pdfNumPages || 1);
-                  const containerHeight = 400; // Match iframe height
-                  const pageHeight = containerHeight / pageCount;
-                  const top = annot.pageIndex * pageHeight + annot.yPct * pageHeight;
-                  const left = annot.xPct * 100;
-                  
-                  return (
-                    <div
-                      key={annot.id}
-                      style={{
-                        position: "absolute",
-                        top: `${top}px`,
-                        left: `${left}%`,
-                        transform: "translate(-50%, -50%)",
-                        background: "rgba(255, 215, 0, 0.9)",
-                        padding: "4px 8px",
-                        borderRadius: 4,
-                        fontSize: `${annot.fontSize}px`,
-                        fontFamily: annot.fontFamily || "Arial",
-                        color: annot.fontColor || "#000",
-                        fontWeight: 600,
-                        cursor: isEditMode ? "pointer" : "default",
-                        pointerEvents: isEditMode ? "auto" : "none",
-                        whiteSpace: "nowrap",
-                        boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
-                        border: isEditMode ? "2px solid #4CAF50" : "1px solid #000",
-                        zIndex: 10
-                      }}
-                      onClick={(e) => {
-                        if (isEditMode) {
-                          e.stopPropagation();
-                          setEditingAnnotation(annot);
-                          setShowAnnotModal(true);
-                        }
-                      }}
-                    >
-                      {annot.text}
-                    </div>
-                  );
-                })}
               </div>
             </>
           )}
 
           {template.attachment?.type === "pdf" && (
             <div className="mt-3">
-              <Button onClick={() => exportPdfWithAnnotations(false)} style={{ ...yellowBtn, marginRight: 8 }}>Download PDF</Button>
-              <Button onClick={() => exportPdfWithAnnotations(true)} style={yellowBtn}>Download & Upload Edited PDF</Button>
-              {annotations.length > 0 && (
-                <span style={{ marginLeft: 12, color: "#FFD700" }}>
-                  {annotations.length} annotation{annotations.length !== 1 ? 's' : ''}
-                </span>
-              )}
+              <div style={{ color: "#FFD700", fontSize: 14, marginBottom: 8 }}>
+                ℹ️ After editing the PDF using the tools above, download it to save your changes
+              </div>
+              <Button 
+                onClick={async () => {
+                  if (!template.attachment?.url) return;
+                  const link = document.createElement("a");
+                  link.href = template.attachment.url;
+                  link.download = `${name.replace(/\s+/g, "_") || "time-tracker"}.pdf`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                }} 
+                style={{ ...yellowBtn, marginRight: 8 }}
+              >
+                Download Original PDF
+              </Button>
             </div>
           )}
 
@@ -507,11 +352,13 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
                       <Form.Group className="mb-3">
                         <Form.Label>Font Family</Form.Label>
                         <Form.Select
-                          value={editingAnnotation.fontFamily || "Arial"}
+                          value={editingAnnotation.fontFamily || "Tahoma"}
                           onChange={e => setEditingAnnotation({ ...editingAnnotation, fontFamily: e.target.value })}
                           style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
                         >
+                          <option value="Tahoma">Tahoma</option>
                           <option value="Arial">Arial</option>
+                          <option value="Calibri">Calibri</option>
                           <option value="Times New Roman">Times New Roman</option>
                           <option value="Courier New">Courier New</option>
                           <option value="Georgia">Georgia</option>
@@ -519,8 +366,6 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
                           <option value="Comic Sans MS">Comic Sans MS</option>
                           <option value="Trebuchet MS">Trebuchet MS</option>
                           <option value="Impact">Impact</option>
-                          <option value="Palatino">Palatino</option>
-                          <option value="Garamond">Garamond</option>
                         </Form.Select>
                       </Form.Group>
                     </Col>
@@ -547,16 +392,46 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
                     </Col>
                   </Row>
                   
-                  <Form.Group>
-                    <Form.Label>Font Size: {editingAnnotation.fontSize}px</Form.Label>
-                    <Form.Control
-                      type="range"
-                      value={editingAnnotation.fontSize}
-                      onChange={e => setEditingAnnotation({ ...editingAnnotation, fontSize: parseInt(e.target.value) || 12 })}
-                      min={8}
-                      max={72}
-                      style={{ background: "#0b0b0b" }}
-                    />
+                  <Form.Group className="mb-3">
+                    <Form.Label>Font Size</Form.Label>
+                    <Row>
+                      <Col md={4}>
+                        <Form.Control
+                          type="number"
+                          value={editingAnnotation.fontSize}
+                          onChange={e => setEditingAnnotation({ ...editingAnnotation, fontSize: Math.max(6, Math.min(96, parseInt(e.target.value) || 12)) })}
+                          min={6}
+                          max={96}
+                          style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
+                        />
+                      </Col>
+                      <Col md={8}>
+                        <Form.Select
+                          value={editingAnnotation.fontSize}
+                          onChange={e => setEditingAnnotation({ ...editingAnnotation, fontSize: parseInt(e.target.value) })}
+                          style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
+                        >
+                          <option value="6">6</option>
+                          <option value="7">7</option>
+                          <option value="8">8</option>
+                          <option value="9">9</option>
+                          <option value="10">10</option>
+                          <option value="11">11</option>
+                          <option value="12">12</option>
+                          <option value="14">14</option>
+                          <option value="16">16</option>
+                          <option value="18">18</option>
+                          <option value="20">20</option>
+                          <option value="22">22</option>
+                          <option value="24">24</option>
+                          <option value="26">26</option>
+                          <option value="28">28</option>
+                          <option value="36">36</option>
+                          <option value="48">48</option>
+                          <option value="72">72</option>
+                        </Form.Select>
+                      </Col>
+                    </Row>
                   </Form.Group>
                   
                   <div style={{ 
@@ -569,7 +444,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
                     <div style={{ fontSize: 11, color: "#999", marginBottom: 8 }}>Preview:</div>
                     <div style={{ 
                       fontSize: `${editingAnnotation.fontSize}px`,
-                      fontFamily: editingAnnotation.fontFamily || "Arial",
+                      fontFamily: editingAnnotation.fontFamily || "Tahoma",
                       color: editingAnnotation.fontColor || "#000",
                       background: "#fff",
                       padding: 8,
