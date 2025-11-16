@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../../api/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
-import { Button, Form, Table, Row, Col, Card, Spinner, Modal } from "react-bootstrap";
+import { Button, Form, Row, Col, Card, Spinner, Modal } from "react-bootstrap";
 import Dropzone from "react-dropzone";
 import { v4 as uuidv4 } from "uuid";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
@@ -52,7 +52,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   // PDF editor state
   const [annotations, setAnnotations] = useState<PdfAnnotation[]>([]);
   const pdfContainerRef = useRef<HTMLDivElement | null>(null);
-  const [pdfNumPages, setPdfNumPages] = useState<number>(1);
+  const [pdfNumPages] = useState<number>(1);
   const [showAnnotModal, setShowAnnotModal] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<PdfAnnotation | null>(null);
 
@@ -83,52 +83,6 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   useEffect(() => {
     if (templateId) loadTemplate(templateId);
   }, [templateId, loadTemplate]);
-
-  /* --------------------------
-      Table editor functions
-  -------------------------- */
-  const addRow = () => {
-    const cols = template.rows[0]?.length ?? 3;
-    const newRow = Array.from({ length: cols }, () => makeEmptyCell());
-    setTemplate(prev => ({ ...prev, rows: [...prev.rows, newRow] }));
-  };
-
-  const addCol = () => {
-    setTemplate(prev => ({
-      ...prev,
-      rows: prev.rows.map(row => [...row, makeEmptyCell()]),
-    }));
-  };
-
-  const removeRow = (rowIdx: number) => {
-    if (template.rows.length === 1) {
-      if (!confirm("Removing last row will reset template. Continue?")) return;
-      setTemplate({ ...defaultTemplate });
-      return;
-    }
-    setTemplate(prev => ({ ...prev, rows: prev.rows.filter((_, i) => i !== rowIdx) }));
-  };
-
-  const removeCol = (colIdx: number) => {
-    const cols = template.rows[0]?.length ?? 1;
-    if (cols <= 1) {
-      if (!confirm("Removing last column will reset template. Continue?")) return;
-      setTemplate({ ...defaultTemplate });
-      return;
-    }
-    setTemplate(prev => ({
-      ...prev,
-      rows: prev.rows.map(row => row.filter((_, c) => c !== colIdx)),
-    }));
-  };
-
-  const updateCell = (r: number, c: number, text: string) => {
-    setTemplate(prev => {
-      const rows = prev.rows.map(row => row.map(cell => ({ ...cell })));
-      rows[r][c].text = text;
-      return { ...prev, rows };
-    });
-  };
 
   /* --------------------------
      Upload helper
