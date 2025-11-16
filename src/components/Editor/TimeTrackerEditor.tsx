@@ -38,6 +38,8 @@ type PdfAnnotation = {
   yPct: number;
   text: string;
   fontSize: number;
+  fontFamily: string;
+  fontColor: string;
 };
 
 /* --------------------------
@@ -55,6 +57,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   const [pdfNumPages] = useState<number>(1);
   const [showAnnotModal, setShowAnnotModal] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<PdfAnnotation | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   /* --------------------------
      Load template (if editing)
@@ -192,7 +195,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
      PDF Editor logic
   -------------------------- */
   const onPdfClick = (e: React.MouseEvent) => {
-    if (!pdfContainerRef.current || !template.attachment) return;
+    if (!pdfContainerRef.current || !template.attachment || !isEditMode) return;
 
     const container = pdfContainerRef.current;
     const rect = container.getBoundingClientRect();
@@ -216,6 +219,8 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
       yPct: Math.max(0, Math.min(1, yPct)),
       text: "Edit me",
       fontSize: 12,
+      fontFamily: "Arial",
+      fontColor: "#000000",
     };
 
     setAnnotations(prev => [...prev, newAnnot]);
@@ -340,6 +345,19 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
               />
             </Col>
             <Col md={6} className="text-end">
+              {template.attachment?.type === "pdf" && (
+                <Button 
+                  style={{ 
+                    ...yellowBtn, 
+                    marginRight: 8,
+                    background: isEditMode ? "#4CAF50" : "#FFD700",
+                  }} 
+                  onClick={() => setIsEditMode(!isEditMode)}
+                >
+                  <span style={{ marginRight: 6 }}>✏️</span>
+                  {isEditMode ? "Done Editing" : "Edit PDF"}
+                </Button>
+              )}
               <Button style={yellowBtn} onClick={saveTemplate} disabled={loading}>
                 {loading ? <Spinner animation="border" size="sm" /> : "Save Template"}
               </Button>
@@ -383,15 +401,17 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
 
           {template.attachment?.type === "pdf" && (
             <>
-              <div style={{ marginBottom: 8, color: "#FFD700", fontWeight: 600 }}>
-                Click anywhere on the PDF to add text annotations
-              </div>
+              {isEditMode && (
+                <div style={{ marginBottom: 8, color: "#4CAF50", fontWeight: 600, fontSize: 14 }}>
+                  ✏️ Edit Mode Active - Click anywhere on the PDF to add text annotations
+                </div>
+              )}
               <div 
                 ref={pdfContainerRef} 
                 style={{ 
-                  border: "1px solid #333", 
+                  border: isEditMode ? "2px solid #4CAF50" : "1px solid #333", 
                   minHeight: 300, 
-                  cursor: "crosshair", 
+                  cursor: isEditMode ? "crosshair" : "default", 
                   position: "relative",
                   background: "#1a1a1a"
                 }} 
@@ -425,19 +445,22 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
                         padding: "4px 8px",
                         borderRadius: 4,
                         fontSize: `${annot.fontSize}px`,
+                        fontFamily: annot.fontFamily || "Arial",
+                        color: annot.fontColor || "#000",
                         fontWeight: 600,
-                        cursor: "pointer",
-                        pointerEvents: "auto",
+                        cursor: isEditMode ? "pointer" : "default",
+                        pointerEvents: isEditMode ? "auto" : "none",
                         whiteSpace: "nowrap",
-                        color: "#000",
                         boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
-                        border: "1px solid #000",
+                        border: isEditMode ? "2px solid #4CAF50" : "1px solid #000",
                         zIndex: 10
                       }}
                       onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingAnnotation(annot);
-                        setShowAnnotModal(true);
+                        if (isEditMode) {
+                          e.stopPropagation();
+                          setEditingAnnotation(annot);
+                          setShowAnnotModal(true);
+                        }
                       }}
                     >
                       {annot.text}
@@ -471,22 +494,91 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
                   <Form.Group className="mb-3">
                     <Form.Label>Text</Form.Label>
                     <Form.Control
+                      as="textarea"
+                      rows={3}
                       value={editingAnnotation.text}
                       onChange={e => setEditingAnnotation({ ...editingAnnotation, text: e.target.value })}
                       style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
                     />
                   </Form.Group>
+                  
+                  <Row>
+                    <Col md={6}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>Font Family</Form.Label>
+                        <Form.Select
+                          value={editingAnnotation.fontFamily || "Arial"}
+                          onChange={e => setEditingAnnotation({ ...editingAnnotation, fontFamily: e.target.value })}
+                          style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
+                        >
+                          <option value="Arial">Arial</option>
+                          <option value="Times New Roman">Times New Roman</option>
+                          <option value="Courier New">Courier New</option>
+                          <option value="Georgia">Georgia</option>
+                          <option value="Verdana">Verdana</option>
+                          <option value="Comic Sans MS">Comic Sans MS</option>
+                          <option value="Trebuchet MS">Trebuchet MS</option>
+                          <option value="Impact">Impact</option>
+                          <option value="Palatino">Palatino</option>
+                          <option value="Garamond">Garamond</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                    
+                    <Col md={6}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>Font Color</Form.Label>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <Form.Control
+                            type="color"
+                            value={editingAnnotation.fontColor || "#000000"}
+                            onChange={e => setEditingAnnotation({ ...editingAnnotation, fontColor: e.target.value })}
+                            style={{ width: 60, height: 40, padding: 2, background: "#0b0b0b", border: "1px solid #333" }}
+                          />
+                          <Form.Control
+                            type="text"
+                            value={editingAnnotation.fontColor || "#000000"}
+                            onChange={e => setEditingAnnotation({ ...editingAnnotation, fontColor: e.target.value })}
+                            placeholder="#000000"
+                            style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
+                          />
+                        </div>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                  
                   <Form.Group>
-                    <Form.Label>Font Size ({editingAnnotation.fontSize}px)</Form.Label>
+                    <Form.Label>Font Size: {editingAnnotation.fontSize}px</Form.Label>
                     <Form.Control
                       type="range"
                       value={editingAnnotation.fontSize}
                       onChange={e => setEditingAnnotation({ ...editingAnnotation, fontSize: parseInt(e.target.value) || 12 })}
                       min={8}
-                      max={48}
+                      max={72}
                       style={{ background: "#0b0b0b" }}
                     />
                   </Form.Group>
+                  
+                  <div style={{ 
+                    marginTop: 16, 
+                    padding: 12, 
+                    background: "#1a1a1a", 
+                    borderRadius: 4,
+                    border: "1px solid #333"
+                  }}>
+                    <div style={{ fontSize: 11, color: "#999", marginBottom: 8 }}>Preview:</div>
+                    <div style={{ 
+                      fontSize: `${editingAnnotation.fontSize}px`,
+                      fontFamily: editingAnnotation.fontFamily || "Arial",
+                      color: editingAnnotation.fontColor || "#000",
+                      background: "#fff",
+                      padding: 8,
+                      borderRadius: 4,
+                      display: "inline-block"
+                    }}>
+                      {editingAnnotation.text || "Edit me"}
+                    </div>
+                  </div>
                 </>
               )}
             </Modal.Body>
