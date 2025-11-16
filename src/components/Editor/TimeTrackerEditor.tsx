@@ -106,39 +106,24 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
     });
   };
 
-const uploadFile = async (file: File, folder: string) => {
+const uploadFile = async (file: File, bucket: string) => {
   if (!user) throw new Error("Sign in first");
 
-  // Check if bucket exists by trying to list it
-  const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-  if (bucketError) {
-    console.error("Bucket list error:", bucketError);
-    throw new Error(`Storage error: ${bucketError.message}`);
-  }
-
-  const bucketExists = buckets?.some(b => b.name === folder);
-  if (!bucketExists) {
-    throw new Error(`Storage bucket "${folder}" not found. Please create it in Supabase dashboard.`);
-  }
-
   const storagePath = `${user.id}/${uuidv4()}-${file.name}`;
-  
+
   const { error: uploadError } = await supabase.storage
-    .from(folder)
-    .upload(storagePath, file, {
-      upsert: true,
-      contentType: file.type,
-    });
+    .from(bucket)
+    .upload(storagePath, file, { upsert: true, contentType: file.type });
 
   if (uploadError) {
     console.error("Upload error:", uploadError);
     throw new Error(`Upload failed: ${uploadError.message}`);
   }
 
-  const { data } = supabase.storage.from(folder).getPublicUrl(storagePath);
+  const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath);
   if (!data?.publicUrl) throw new Error("Failed to get public URL");
 
-  // Insert metadata into file_bank
+  // Save metadata in DB
   const { error: insertError } = await supabase.from("file_bank").insert({
     user_id: user.id,
     filename: file.name,
@@ -146,7 +131,7 @@ const uploadFile = async (file: File, folder: string) => {
     content_type: file.type,
     size: file.size,
   });
-  
+
   if (insertError) {
     console.error("Database insert error:", insertError);
     throw new Error(`Database insert failed: ${insertError.message}`);
@@ -154,6 +139,7 @@ const uploadFile = async (file: File, folder: string) => {
 
   return { storagePath, url: data.publicUrl };
 };
+
   // File upload handler
   const onDropFile = async (acceptedFiles: File[]) => {
     if (!user) return alert("Sign in first");
