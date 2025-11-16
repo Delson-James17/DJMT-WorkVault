@@ -52,7 +52,7 @@ export const DailyMotivation: React.FC = () => {
     <div className="p-3 border rounded bg-light mb-3" style={{ maxWidth: 400 }}>
       <h5>Daily Motivation</h5>
       <blockquote className="mb-0">{quote.quote}</blockquote>
-      <small className="text-muted">— {quote.author}</small>
+      <small className="text-muted text-light">— {quote.author}</small>
     </div>
   );
 };

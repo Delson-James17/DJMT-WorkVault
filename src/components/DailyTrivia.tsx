@@ -51,7 +51,7 @@ export const DailyTrivia: React.FC = () => {
     <div className="p-3 border rounded bg-light mb-3" style={{ maxWidth: 400 }}>
       <h5>Trivia for Today</h5>
       <blockquote className="mb-2">{trivia.question}</blockquote>
-      <small className="text-muted">Answer: {trivia.answer}</small>
+      <small className="text-muted text-white" >Answer: {trivia.answer}</small>
     </div>
   );
 };

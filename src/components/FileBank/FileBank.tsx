@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../api/supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
-import { Button, ListGroup, Card } from 'react-bootstrap';
+import { Button, ListGroup, Card, Container, Row, Col, Form } from 'react-bootstrap';
 
 interface FileRecord {
   id: string;
@@ -17,6 +17,7 @@ export const FileBank: React.FC = () => {
   const { user } = useAuth();
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const loadFiles = useCallback(async () => {
     if (!user) return;
@@ -35,16 +36,15 @@ export const FileBank: React.FC = () => {
     setFiles((data as FileRecord[]) || []);
   }, [user]);
 
-useEffect(() => {
-  if (!user) return;
+  useEffect(() => {
+    if (!user) return;
 
-  const run = async () => {
-    await loadFiles();
-  };
+    const run = async () => {
+      await loadFiles();
+    };
 
-  run();
-}, [user, loadFiles]);
-
+    run();
+  }, [user, loadFiles]);
 
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -54,6 +54,7 @@ useEffect(() => {
   const onSaveAttachment = async () => {
     if (!selectedFile || !user) return;
 
+    setUploading(true);
     const path = `file-bank/${user.id}/${Date.now()}-${selectedFile.name}`;
 
     const { error: uploadErr } = await supabase.storage
@@ -62,6 +63,8 @@ useEffect(() => {
 
     if (uploadErr) {
       console.error(uploadErr);
+      alert('Upload failed: ' + uploadErr.message);
+      setUploading(false);
       return;
     }
 
@@ -74,6 +77,7 @@ useEffect(() => {
     });
 
     setSelectedFile(null);
+    setUploading(false);
     loadFiles();
   };
 
@@ -84,6 +88,7 @@ useEffect(() => {
 
     if (error) {
       console.error(error);
+      alert('Download failed: ' + error.message);
       return;
     }
 
@@ -95,77 +100,151 @@ useEffect(() => {
     link.remove();
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div
       style={{
-        background: '#1b1b1b',
-        padding: '20px',
-        borderRadius: '12px',
-        color: 'white',
+        background: '#0f0f10',
+        minHeight: '100vh',
+        padding: '12px',
       }}
     >
-      <h3 style={{ color: '#FFD700' }}>📁 File Bank</h3>
+      <Container fluid>
+        <Card style={{ background: 'transparent', border: 'none', color: '#fff' }}>
+          <Card.Body style={{ padding: '12px' }}>
+            {/* Header */}
+            <Row className="mb-3">
+              <Col>
+                <h3 style={{ color: '#FFD700', fontWeight: 700, marginBottom: 0 }}>
+                  📁 File Bank
+                </h3>
+                <p style={{ color: '#aaa', fontSize: 14, marginTop: 4 }}>
+                  Upload and manage your files
+                </p>
+              </Col>
+            </Row>
 
-      <input
-        type="file"
-        onChange={onSelectFile}
-        style={{ marginTop: '10px', marginBottom: '10px' }}
-      />
+            {/* Upload Section */}
+            <Row className="mb-3">
+              <Col xs={12}>
+                <Card style={{ background: '#171717', border: '1px solid #222', borderRadius: 8 }}>
+                  <Card.Body>
+                    <Form.Group>
+                      <Form.Label style={{ color: '#FFD700', fontWeight: 600, marginBottom: 8 }}>
+                        Upload New File
+                      </Form.Label>
+                      <Form.Control
+                        type="file"
+                        onChange={onSelectFile}
+                        style={{
+                          background: '#0b0b0b',
+                          color: '#fff',
+                          border: '1px solid #333',
+                          marginBottom: 12,
+                        }}
+                      />
+                      {selectedFile && (
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ color: '#aaa', fontSize: 13, marginBottom: 8 }}>
+                            Selected: <span style={{ color: '#fff' }}>{selectedFile.name}</span>
+                            <span style={{ marginLeft: 8 }}>({formatFileSize(selectedFile.size)})</span>
+                          </div>
+                          <Button
+                            onClick={onSaveAttachment}
+                            disabled={uploading}
+                            style={{
+                              background: '#FFD700',
+                              border: 'none',
+                              color: '#000',
+                              fontWeight: 600,
+                              width: '100%',
+                              maxWidth: 200,
+                            }}
+                          >
+                            {uploading ? '⏳ Uploading...' : '💾 Save File'}
+                          </Button>
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
 
-      {selectedFile && (
-        <Button
-          onClick={onSaveAttachment}
-          style={{
-            background: '#FFD700',
-            border: 'none',
-            color: '#000',
-            fontWeight: 'bold',
-            marginBottom: '20px',
-          }}
-        >
-          Save Attachment
-        </Button>
-      )}
-
-      <Card
-        style={{
-          background: '#222',
-          border: '1px solid #333',
-          color: 'white',
-          marginTop: '20px',
-        }}
-      >
-        <Card.Body>
-          <ListGroup variant="flush">
-            {files.map((f) => (
-              <ListGroup.Item
-                key={f.id}
-                style={{
-                  background: '#1f1f1f',
-                  color: '#e0e0e0',
-                  border: '1px solid #333',
-                }}
-                className="d-flex justify-content-between align-items-center"
-              >
-                <div>{f.filename}</div>
-
-                <Button
-                  size="sm"
-                  onClick={() => downloadFile(f.storage_path, f.filename)}
-                  style={{
-                    background: '#FFD700',
-                    border: 'none',
-                    color: '#000',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Download
-                </Button>
-              </ListGroup.Item>
-            ))}
-          </ListGroup>
-        </Card.Body>
-      </Card>
+            {/* Files List */}
+            <Row>
+              <Col xs={12}>
+                <Card style={{ background: '#171717', border: '1px solid #222', borderRadius: 8 }}>
+                  <Card.Body style={{ padding: '12px' }}>
+                    <h5 style={{ color: '#FFD700', fontWeight: 600, marginBottom: 12 }}>
+                      Your Files ({files.length})
+                    </h5>
+                    {files.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
+                        <div style={{ fontSize: 48, marginBottom: 12 }}>📂</div>
+                        <div>No files uploaded yet</div>
+                      </div>
+                    ) : (
+                      <ListGroup variant="flush">
+                        {files.map((f) => (
+                          <ListGroup.Item
+                            key={f.id}
+                            style={{
+                              background: '#0b0b0b',
+                              color: '#e0e0e0',
+                              border: '1px solid #222',
+                              borderRadius: 6,
+                              marginBottom: 8,
+                              padding: '12px',
+                            }}
+                          >
+                            <Row className="align-items-center g-2">
+                              <Col xs={12} md={6}>
+                                <div style={{ fontWeight: 600, marginBottom: 4, wordBreak: 'break-word' }}>
+                                  📄 {f.filename}
+                                </div>
+                                <div style={{ fontSize: 12, color: '#888' }}>
+                                  {formatFileSize(f.size)} • {formatDate(f.created_at)}
+                                </div>
+                              </Col>
+                              <Col xs={12} md={6} className="text-md-end">
+                                <Button
+                                  size="sm"
+                                  onClick={() => downloadFile(f.storage_path, f.filename)}
+                                  style={{
+                                    background: '#FFD700',
+                                    border: 'none',
+                                    color: '#000',
+                                    fontWeight: 600,
+                                    width: '100%',
+                                    maxWidth: 150,
+                                  }}
+                                >
+                                  ⬇️ Download
+                                </Button>
+                              </Col>
+                            </Row>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
+      </Container>
     </div>
   );
 };

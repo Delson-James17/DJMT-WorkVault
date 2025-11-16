@@ -1,0 +1,101 @@
+/* src/components/Navbar.css */
+
+.custom-navbar {
+  background: rgba(10, 10, 10, 0.95) !important;
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1rem 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.brand-logo {
+  font-size: 1.5rem !important;
+  font-weight: 700 !important;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  transition: all 0.3s ease !important;
+}
+
+.brand-logo:hover {
+  transform: scale(1.05);
+  filter: brightness(1.2);
+}
+
+.nav-link-custom {
+  color: #a0a0a0 !important;
+  font-weight: 500 !important;
+  padding: 0.5rem 1rem !important;
+  margin: 0 0.25rem !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+  position: relative;
+}
+
+.nav-link-custom::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+  transition: width 0.3s ease;
+}
+
+.nav-link-custom:hover {
+  color: #ffffff !important;
+  background: rgba(139, 92, 246, 0.1) !important;
+}
+
+.nav-link-custom:hover::before {
+  width: 80%;
+}
+
+.logout-btn-nav {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+  padding: 0.5rem 1.25rem !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  transition: all 0.3s ease !important;
+  font-size: 0.95rem !important;
+  margin-left: 1rem !important;
+}
+
+.logout-btn-nav:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  transform: translateX(3px) !important;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3) !important;
+}
+
+.btn-icon-nav {
+  font-size: 1.1rem;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+
+.logout-btn-nav:hover .btn-icon-nav {
+  transform: translateX(3px);
+}
+
+/* Mobile responsiveness */
+@media (max-width: 991px) {
+  .logout-btn-nav {
+    margin-left: 0 !important;
+    margin-top: 1rem !important;
+    width: 100%;
+    justify-content: center !important;
+  }
+  
+  .nav-link-custom {
+    margin: 0.25rem 0 !important;
+  }
+}

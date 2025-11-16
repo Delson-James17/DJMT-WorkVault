@@ -1,31 +1,42 @@
 // src/pages/Dashboard.tsx
 import React from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { Container, Row, Col, Button } from "react-bootstrap";
+import { Container, Row, Col } from "react-bootstrap";
 import { DailyMotivation } from "../components/DailyMotivation";
-import {DailyTrivia} from "../components/DailyTrivia";
+import { DailyTrivia } from "../components/DailyTrivia";
+import "./Dashboard.css";
+
 export const Dashboard: React.FC = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
 
   return (
-    <Container className="mt-4">
-      <Row className="mb-3 align-items-center">
-        <Col>
-          <h4>Welcome, {user?.email}</h4>
-        </Col>
-        <Col className="text-end">
-          <Button variant="danger" onClick={signOut}>Logout</Button>
-        </Col>
-      </Row>
+    <div className="dashboard-wrapper">
+      <div className="animated-bg"></div>
+      <Container className="dashboard-container">
+        <div className="header-section">
+          <div className="welcome-content">
+            <div className="welcome-badge">DASHBOARD</div>
+            <h1 className="welcome-title">
+              Welcome back,
+              <span className="user-name">{user?.email?.split('@')[0]}</span>
+            </h1>
+            <p className="welcome-subtitle">Ready to conquer today?</p>
+          </div>
+        </div>
 
-      <Row>
-         <Col md={6} className="mb-3">
-             <DailyTrivia />
-        </Col>
-        <Col md={6} className="mb-3">
-          <DailyMotivation />
-        </Col>
-      </Row>
-    </Container>
+        <Row className="content-grid">
+          <Col md={6} className="mb-4">
+            <div className="card-wrapper card-left">
+              <DailyTrivia />
+            </div>
+          </Col>
+          <Col md={6} className="mb-4">
+            <div className="card-wrapper card-right">
+              <DailyMotivation />
+            </div>
+          </Col>
+        </Row>
+      </Container>
+    </div>
   );
 };
