@@ -1,12 +1,6 @@
 // src/components/Editor/PdfEditor.tsx
 import React, { useState } from "react";
 import { Button, Form, Alert } from "react-bootstrap";
-import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
-
-// Set worker from CDN
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 type TextAnnotation = {
   id: string;
@@ -32,26 +26,10 @@ interface PdfEditorProps {
 }
 
 export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
-  const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
-  const [scale, setScale] = useState<number>(1.5);
   const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
   const [imageAnnotations, setImageAnnotations] = useState<ImageAnnotation[]>([]);
   const [newText, setNewText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  function onDocumentLoadSuccess({ numPages }: { numPages: number }): void {
-    setNumPages(numPages);
-    setLoading(false);
-    setError(null);
-  }
-
-  function onDocumentLoadError(error: Error): void {
-    console.error('Error loading PDF:', error);
-    setError(`Failed to load PDF: ${error.message}`);
-    setLoading(false);
-  }
+  const [currentPage, setCurrentPage] = useState(1);
 
   const addTextAnnotation = () => {
     if (!newText.trim()) return;
@@ -61,7 +39,7 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
       text: newText,
       x: 100,
       y: 100,
-      page: pageNumber,
+      page: currentPage,
     };
 
     setTextAnnotations(prev => [...prev, annotation]);
@@ -81,7 +59,7 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
         y: 100,
         width: 100,
         height: 100,
-        page: pageNumber,
+        page: currentPage,
       };
 
       setImageAnnotations(prev => [...prev, annotation]);
@@ -98,46 +76,28 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
     alert("Annotations saved!");
   };
 
-  if (error) {
-    return (
-      <Alert variant="danger">
-        <strong>Error:</strong> {error}
-        <br />
-        <small>Make sure the PDF URL is accessible.</small>
-      </Alert>
-    );
-  }
+  const handleDownload = () => {
+    window.open(url, '_blank');
+  };
 
   return (
     <div>
-      <div className="d-flex gap-2 mb-3 align-items-center flex-wrap">
-        <Button 
-          size="sm" 
-          onClick={() => setPageNumber(p => Math.max(1, p - 1))} 
-          disabled={pageNumber <= 1}
-        >
-          Previous
-        </Button>
-        <span>
-          Page {pageNumber} of {numPages || '?'}
-        </span>
-        <Button 
-          size="sm" 
-          onClick={() => setPageNumber(p => Math.min(numPages, p + 1))} 
-          disabled={pageNumber >= numPages}
-        >
-          Next
-        </Button>
-        
-        <div className="ms-3">
-          <label className="me-2">Zoom:</label>
-          <Button size="sm" onClick={() => setScale(s => Math.max(0.5, s - 0.25))}>-</Button>
-          <span className="mx-2">{Math.round(scale * 100)}%</span>
-          <Button size="sm" onClick={() => setScale(s => Math.min(3, s + 0.25))}>+</Button>
-        </div>
-      </div>
+      <Alert variant="info" className="mb-3">
+        <strong>PDF Viewer</strong>
+        <p className="mb-0">View and annotate your PDF document. Click "Download" to view the full PDF in a new tab.</p>
+      </Alert>
 
       <div className="d-flex gap-2 mb-3 flex-wrap">
+        <Form.Control
+          type="number"
+          placeholder="Page"
+          value={currentPage}
+          onChange={(e) => setCurrentPage(Number(e.target.value) || 1)}
+          style={{ width: 100 }}
+          size="sm"
+          min={1}
+        />
+        
         <Form.Control
           type="text"
           placeholder="Enter text to add"
@@ -166,86 +126,31 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
         <Button size="sm" variant="success" onClick={handleSave}>
           Save Annotations
         </Button>
+        
+        <Button size="sm" variant="primary" onClick={handleDownload}>
+          Download PDF
+        </Button>
       </div>
 
+      {/* PDF Preview using iframe or object */}
       <div 
         style={{ 
           border: "1px solid #ddd", 
-          overflow: "auto",
-          maxHeight: "70vh",
           backgroundColor: "#f5f5f5",
           padding: 10,
-          position: "relative"
+          marginBottom: 20
         }}
       >
-        {loading && (
-          <div className="text-center p-4">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        )}
-        
-        <Document
-          file={url}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={onDocumentLoadError}
-          loading={
-            <div className="text-center p-4">
-              <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading PDF...</span>
-              </div>
-            </div>
-          }
-        >
-          <Page 
-            pageNumber={pageNumber} 
-            scale={scale}
-            renderTextLayer={true}
-            renderAnnotationLayer={true}
-          />
-        </Document>
-        
-        {/* Render text annotations as overlays */}
-        {textAnnotations
-          .filter(a => a.page === pageNumber)
-          .map(annotation => (
-            <div
-              key={annotation.id}
-              style={{
-                position: 'absolute',
-                left: annotation.x,
-                top: annotation.y,
-                color: 'red',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                pointerEvents: 'none',
-                zIndex: 1000
-              }}
-            >
-              {annotation.text}
-            </div>
-          ))}
-          
-        {/* Render image annotations as overlays */}
-        {imageAnnotations
-          .filter(a => a.page === pageNumber)
-          .map(annotation => (
-            <img
-              key={annotation.id}
-              src={annotation.url}
-              alt="annotation"
-              style={{
-                position: 'absolute',
-                left: annotation.x,
-                top: annotation.y,
-                width: annotation.width,
-                height: annotation.height,
-                pointerEvents: 'none',
-                zIndex: 1000
-              }}
-            />
-          ))}
+        <iframe
+          src={`${url}#toolbar=1&navpanes=1&scrollbar=1`}
+          style={{
+            width: '100%',
+            height: '600px',
+            border: 'none',
+            borderRadius: '4px'
+          }}
+          title="PDF Viewer"
+        />
       </div>
 
       {textAnnotations.length > 0 && (
@@ -260,6 +165,27 @@ export const PdfEditor: React.FC<PdfEditorProps> = ({ url, onSave }) => {
                   variant="link" 
                   className="text-danger"
                   onClick={() => removeTextAnnotation(a.id)}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      
+      {imageAnnotations.length > 0 && (
+        <div className="mt-3">
+          <strong>Image Annotations:</strong>
+          <ul>
+            {imageAnnotations.map(a => (
+              <li key={a.id}>
+                Page {a.page}: Image annotation
+                <Button 
+                  size="sm" 
+                  variant="link" 
+                  className="text-danger"
+                  onClick={() => setImageAnnotations(prev => prev.filter(img => img.id !== a.id))}
                 >
                   Remove
                 </Button>
