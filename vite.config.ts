@@ -4,13 +4,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['cookie', 'react-router', 'react-router-dom', 'pdfjs-dist'],
+    include: ['react', 'react-dom', 'react-router-dom', 'cookie', 'pdfjs-dist'],
     esbuildOptions: {
       mainFields: ['module', 'main']
     }
-  },
-  ssr: {
-    noExternal: ['cookie', 'react-router', 'react-router-dom']
   },
   build: {
     commonjsOptions: {
@@ -20,10 +17,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Keep React in main bundle to avoid version conflicts
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'react-vendor';
-            }
             if (id.includes('bootstrap')) {
               return 'bootstrap-vendor';
             }
@@ -33,14 +28,19 @@ export default defineConfig({
             if (id.includes('pdfjs-dist')) {
               return 'pdf-vendor';
             }
+            // Don't split react/react-dom - keep them together
+            if (id.includes('react') || id.includes('react-dom')) {
+              return 'vendor';
+            }
             return 'vendor';
           }
         }
       }
     },
-    chunkSizeWarningLimit: 1500 // Increased limit
+    chunkSizeWarningLimit: 1500
   },
   resolve: {
+    dedupe: ['react', 'react-dom'], // Critical: prevent duplicate React
     mainFields: ['module', 'main']
   },
   server: {

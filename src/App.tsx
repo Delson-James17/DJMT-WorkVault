@@ -5,14 +5,15 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DashboardNavbar } from "./components/Navbar";
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-// Lazy load pages and components
-const Login = lazy(() => import("./pages/Login").then(module => ({ default: module.Login })));
-const SignUp = lazy(() => import("./pages/SignUp").then(module => ({ default: module.SignUp })));
-const Dashboard = lazy(() => import("./pages/Dashboard").then(module => ({ default: module.Dashboard })));
-const TimeTrackerEditor = lazy(() => import("./components/Editor/TimeTrackerEditor").then(module => ({ default: module.TimeTrackerEditor })));
-const FileBank = lazy(() => import("./components/FileBank/FileBank").then(module => ({ default: module.FileBank })));
+// Import Login and SignUp normally (they're small)
+import { Login } from "./pages/Login";
+import { SignUp } from "./pages/SignUp";
 
-// Loading component
+// Only lazy load heavy components
+const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
+const TimeTrackerEditor = lazy(() => import("./components/Editor/TimeTrackerEditor").then(m => ({ default: m.TimeTrackerEditor })));
+const FileBank = lazy(() => import("./components/FileBank/FileBank").then(m => ({ default: m.FileBank })));
+
 const LoadingFallback = () => (
   <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>
     <div className="spinner-border text-primary" role="status">
