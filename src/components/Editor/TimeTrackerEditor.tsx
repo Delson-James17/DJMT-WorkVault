@@ -106,44 +106,54 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
     });
   };
 
-  // Upload helper - fixed to remove unused variable
-  const uploadFile = async (file: File, folder: string) => {
-    if (!user) throw new Error("Sign in first");
+const uploadFile = async (file: File, folder: string) => {
+  if (!user) throw new Error("Sign in first");
 
-    const storagePath = `${user.id}/${uuidv4()}-${file.name}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from(folder)
-      .upload(storagePath, file, {
-        upsert: true,
-        contentType: file.type,
-      });
+  // Check if bucket exists by trying to list it
+  const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+  if (bucketError) {
+    console.error("Bucket list error:", bucketError);
+    throw new Error(`Storage error: ${bucketError.message}`);
+  }
 
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw new Error(`Upload failed: ${uploadError.message}`);
-    }
+  const bucketExists = buckets?.some(b => b.name === folder);
+  if (!bucketExists) {
+    throw new Error(`Storage bucket "${folder}" not found. Please create it in Supabase dashboard.`);
+  }
 
-    const { data } = supabase.storage.from(folder).getPublicUrl(storagePath);
-    if (!data?.publicUrl) throw new Error("Failed to get public URL");
-
-    // Insert metadata into file_bank
-    const { error: insertError } = await supabase.from("file_bank").insert({
-      user_id: user.id,
-      filename: file.name,
-      storage_path: storagePath,
-      content_type: file.type,
-      size: file.size,
+  const storagePath = `${user.id}/${uuidv4()}-${file.name}`;
+  
+  const { error: uploadError } = await supabase.storage
+    .from(folder)
+    .upload(storagePath, file, {
+      upsert: true,
+      contentType: file.type,
     });
-    
-    if (insertError) {
-      console.error("Database insert error:", insertError);
-      throw new Error(`Database insert failed: ${insertError.message}`);
-    }
 
-    return { storagePath, url: data.publicUrl };
-  };
+  if (uploadError) {
+    console.error("Upload error:", uploadError);
+    throw new Error(`Upload failed: ${uploadError.message}`);
+  }
 
+  const { data } = supabase.storage.from(folder).getPublicUrl(storagePath);
+  if (!data?.publicUrl) throw new Error("Failed to get public URL");
+
+  // Insert metadata into file_bank
+  const { error: insertError } = await supabase.from("file_bank").insert({
+    user_id: user.id,
+    filename: file.name,
+    storage_path: storagePath,
+    content_type: file.type,
+    size: file.size,
+  });
+  
+  if (insertError) {
+    console.error("Database insert error:", insertError);
+    throw new Error(`Database insert failed: ${insertError.message}`);
+  }
+
+  return { storagePath, url: data.publicUrl };
+};
   // File upload handler
   const onDropFile = async (acceptedFiles: File[]) => {
     if (!user) return alert("Sign in first");
