@@ -17,6 +17,7 @@ type TemplateData = {
   rows: Cell[][];
   attachment?: { url: string; type: "pdf" | "word" | "excel"; storagePath: string };
   meta?: { project?: string; period?: string; employeeName?: string };
+  annotations?: PdfAnnotation[]; // Store annotations in template
 };
 
 const makeEmptyCell = (): Cell => ({ id: uuidv4(), text: "" });
@@ -24,6 +25,7 @@ const makeEmptyCell = (): Cell => ({ id: uuidv4(), text: "" });
 const defaultTemplate: TemplateData = {
   rows: [[makeEmptyCell(), makeEmptyCell(), makeEmptyCell()]],
   meta: {},
+  annotations: [],
 };
 
 /* --------------------------
@@ -50,7 +52,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
   // PDF editor state
   const [annotations, setAnnotations] = useState<PdfAnnotation[]>([]);
   const pdfContainerRef = useRef<HTMLDivElement | null>(null);
-  const [pdfNumPages] = useState<number>(0);
+  const [pdfNumPages] = useState<number>(1);
   const [showAnnotModal, setShowAnnotModal] = useState(false);
   const [editingAnnotation, setEditingAnnotation] = useState<PdfAnnotation | null>(null);
 
@@ -67,6 +69,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
         const loadedTemplate: TemplateData = data.template_data ?? defaultTemplate;
         setTemplate(loadedTemplate);
         setName(data.name ?? "My Time Tracker");
+        setAnnotations(loadedTemplate.annotations ?? []);
       } catch (err) {
         console.error(err);
         alert("Failed to load template");
@@ -212,7 +215,8 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
     if (!user) return alert("Sign in first");
     setLoading(true);
     try {
-      const payload = { name, template_data: template, user_id: user.id };
+      const templateWithAnnotations = { ...template, annotations };
+      const payload = { name, template_data: templateWithAnnotations, user_id: user.id };
       if (!templateId) {
         const { error } = await supabase.from("templates").insert(payload);
         if (error) throw error;
@@ -273,6 +277,8 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
 
   const removeAnnotation = (id: string) => {
     setAnnotations(prev => prev.filter(a => a.id !== id));
+    setEditingAnnotation(null);
+    setShowAnnotModal(false);
   };
 
   const exportPdfWithAnnotations = async (alsoUpload = false) => {
@@ -366,6 +372,7 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
               <Form.Control
                 value={name}
                 onChange={e => setName(e.target.value)}
+                placeholder="Template Name"
                 style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #222" }}
               />
             </Col>
@@ -438,33 +445,118 @@ export const TimeTrackerEditor: React.FC<{ templateId?: string }> = ({ templateI
           </div>
 
           {template.attachment?.type === "pdf" && (
-            <div ref={pdfContainerRef} style={{ border: "1px solid #333", minHeight: 300, cursor: "crosshair" }} onClick={onPdfClick}>
-              <iframe src={template.attachment.url} width="100%" height={400} title="PDF Preview" />
+            <>
+              <div style={{ marginBottom: 8, color: "#FFD700", fontWeight: 600 }}>
+                Click anywhere on the PDF to add text annotations
+              </div>
+              <div 
+                ref={pdfContainerRef} 
+                style={{ 
+                  border: "1px solid #333", 
+                  minHeight: 300, 
+                  cursor: "crosshair", 
+                  position: "relative",
+                  background: "#1a1a1a"
+                }} 
+                onClick={onPdfClick}
+              >
+                <iframe 
+                  src={template.attachment.url} 
+                  width="100%" 
+                  height={400} 
+                  title="PDF Preview" 
+                  style={{ pointerEvents: "none", border: "none" }}
+                />
+                
+                {/* Render annotations as overlays */}
+                {annotations.map(annot => {
+                  const pageCount = Math.max(1, pdfNumPages || 1);
+                  const containerHeight = 400; // Match iframe height
+                  const pageHeight = containerHeight / pageCount;
+                  const top = annot.pageIndex * pageHeight + annot.yPct * pageHeight;
+                  const left = annot.xPct * 100;
+                  
+                  return (
+                    <div
+                      key={annot.id}
+                      style={{
+                        position: "absolute",
+                        top: `${top}px`,
+                        left: `${left}%`,
+                        transform: "translate(-50%, -50%)",
+                        background: "rgba(255, 215, 0, 0.9)",
+                        padding: "4px 8px",
+                        borderRadius: 4,
+                        fontSize: `${annot.fontSize}px`,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        pointerEvents: "auto",
+                        whiteSpace: "nowrap",
+                        color: "#000",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+                        border: "1px solid #000",
+                        zIndex: 10
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingAnnotation(annot);
+                        setShowAnnotModal(true);
+                      }}
+                    >
+                      {annot.text}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {template.attachment?.type === "pdf" && (
+            <div className="mt-3">
+              <Button onClick={() => exportPdfWithAnnotations(false)} style={{ ...yellowBtn, marginRight: 8 }}>Download PDF</Button>
+              <Button onClick={() => exportPdfWithAnnotations(true)} style={yellowBtn}>Download & Upload Edited PDF</Button>
+              {annotations.length > 0 && (
+                <span style={{ marginLeft: 12, color: "#FFD700" }}>
+                  {annotations.length} annotation{annotations.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </div>
           )}
 
-          <div className="mt-3">
-            <Button onClick={() => exportPdfWithAnnotations(false)} style={{ ...yellowBtn, marginRight: 8 }}>Download PDF</Button>
-            <Button onClick={() => exportPdfWithAnnotations(true)} style={yellowBtn}>Download & Upload Edited PDF</Button>
-          </div>
-
           {/* Annotation modal */}
           <Modal show={showAnnotModal} onHide={() => setShowAnnotModal(false)}>
-            <Modal.Header closeButton>
+            <Modal.Header closeButton style={{ background: "#1a1a1a", borderColor: "#333", color: "#fff" }}>
               <Modal.Title>Edit Annotation</Modal.Title>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body style={{ background: "#0f0f10", color: "#fff" }}>
               {editingAnnotation && (
-                <Form.Control
-                  value={editingAnnotation.text}
-                  onChange={e => setEditingAnnotation({ ...editingAnnotation, text: e.target.value })}
-                />
+                <>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Text</Form.Label>
+                    <Form.Control
+                      value={editingAnnotation.text}
+                      onChange={e => setEditingAnnotation({ ...editingAnnotation, text: e.target.value })}
+                      style={{ background: "#0b0b0b", color: "#fff", border: "1px solid #333" }}
+                    />
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.Label>Font Size ({editingAnnotation.fontSize}px)</Form.Label>
+                    <Form.Control
+                      type="range"
+                      value={editingAnnotation.fontSize}
+                      onChange={e => setEditingAnnotation({ ...editingAnnotation, fontSize: parseInt(e.target.value) || 12 })}
+                      min={8}
+                      max={48}
+                      style={{ background: "#0b0b0b" }}
+                    />
+                  </Form.Group>
+                </>
               )}
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer style={{ background: "#1a1a1a", borderColor: "#333" }}>
               <Button variant="secondary" onClick={() => setShowAnnotModal(false)}>Cancel</Button>
               <Button variant="danger" onClick={() => editingAnnotation && removeAnnotation(editingAnnotation.id)}>Delete</Button>
-              <Button variant="primary" onClick={() => editingAnnotation && saveAnnotationEdit(editingAnnotation)}>Save</Button>
+              <Button style={yellowBtn} onClick={() => editingAnnotation && saveAnnotationEdit(editingAnnotation)}>Save</Button>
             </Modal.Footer>
           </Modal>
         </Card.Body>
